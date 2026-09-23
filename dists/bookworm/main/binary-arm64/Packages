@@ -1,0 +1,10 @@
+Package: neybox
+Version: 0.3.0
+Architecture: arm64
+Maintainer: NeyBox Project
+Filename: pool/main/n/neybox/neybox_0.3.0_arm64.deb
+Size: 13980
+SHA256: fdce45c12eb2c1e737c7842926c4a8528bac4e0edbdd6480e8cd8dcce97b475c
+Description: Lightweight UNIX toolbox and shell
+ NeyBox is a monolithic UNIX-style toolbox and shell written in C.
+
