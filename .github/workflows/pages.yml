@@ -1,4 +1,4 @@
-name: Publish APT repository
+name: Publish NeyBox APT Repository
 
 on:
   push:
@@ -11,62 +11,49 @@ permissions:
   pages: write
   id-token: write
 
-concurrency:
-  group: pages
-  cancel-in-progress: true
-
 jobs:
-  deploy:
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
-
+  build:
     runs-on: ubuntu-latest
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Prepare APT repository
+      - name: Prepare GitHub Pages
         run: |
-          mkdir -p _site
-          cp -a dists _site/
-          cp -a pool _site/
+          rm -rf _site
+          mkdir -p _site/apt/debian
 
+          cp -r apt/debian/dists _site/apt/debian/
+          cp -r apt/debian/pool _site/apt/debian/
+
+      - name: Generate package index
+        run: |
           python3 <<'PY'
           import os
-          import re
-          import hashlib
           import subprocess
-          from html import escape
+          import hashlib
+          import html
 
+          root = "apt/debian/pool"
           packages = []
 
-          for root, dirs, files in os.walk("pool"):
+          for base, dirs, files in os.walk(root):
               for filename in files:
                   if not filename.endswith(".deb"):
                       continue
 
-                  path = os.path.join(root, filename)
-                  relative = os.path.relpath(path, "pool")
-                  url = "pool/" + relative.replace(os.sep, "/")
+                  path = os.path.join(base, filename)
+                  rel = os.path.relpath(path, root)
+                  url = "apt/debian/pool/" + rel
 
-                  info = {}
-
-                  try:
-                      output = subprocess.check_output(
-                          ["dpkg-deb", "-f", path],
-                          text=True,
-                          stderr=subprocess.DEVNULL
+                  def field(name):
+                      result = subprocess.run(
+                          ["dpkg-deb", "-f", path, name],
+                          capture_output=True,
+                          text=True
                       )
-
-                      for line in output.splitlines():
-                          if ": " in line:
-                              key, value = line.split(": ", 1)
-                              info[key] = value
-
-                  except Exception:
-                      info = {}
+                      return result.stdout.strip()
 
                   size = os.path.getsize(path)
 
@@ -74,221 +61,144 @@ jobs:
                       sha256 = hashlib.sha256(f.read()).hexdigest()
 
                   packages.append({
-                      "filename": filename,
-                      "url": url,
-                      "package": info.get("Package", "Unknown"),
-                      "version": info.get("Version", "Unknown"),
-                      "architecture": info.get("Architecture", "Unknown"),
-                      "maintainer": info.get("Maintainer", "Unknown"),
-                      "description": info.get("Description", "No description available."),
+                      "package": field("Package"),
+                      "version": field("Version"),
+                      "architecture": field("Architecture"),
+                      "maintainer": field("Maintainer"),
+                      "description": field("Description"),
                       "size": size,
-                      "sha256": sha256
+                      "sha256": sha256,
+                      "url": url
                   })
-
-          packages.sort(
-              key=lambda x: (x["package"], x["version"], x["architecture"])
-          )
-
-          def format_size(size):
-              if size < 1024:
-                  return f"{size} B"
-              if size < 1024 * 1024:
-                  return f"{size / 1024:.1f} KiB"
-              return f"{size / (1024 * 1024):.1f} MiB"
 
           cards = []
 
           for pkg in packages:
               cards.append(f"""
               <article class="package">
-                <div class="package-header">
-                  <h3>{escape(pkg["package"])}</h3>
-                  <span>{escape(pkg["architecture"])}</span>
-                </div>
+                <h2>{html.escape(pkg["package"])}</h2>
+                <p>{html.escape(pkg["description"])}</p>
 
                 <dl>
                   <dt>Version</dt>
-                  <dd>{escape(pkg["version"])}</dd>
+                  <dd>{html.escape(pkg["version"])}</dd>
 
                   <dt>Architecture</dt>
-                  <dd>{escape(pkg["architecture"])}</dd>
+                  <dd>{html.escape(pkg["architecture"])}</dd>
 
                   <dt>Maintainer</dt>
-                  <dd>{escape(pkg["maintainer"])}</dd>
+                  <dd>{html.escape(pkg["maintainer"])}</dd>
 
                   <dt>Size</dt>
-                  <dd>{format_size(pkg["size"])}</dd>
+                  <dd>{pkg["size"]:,} bytes</dd>
+
+                  <dt>SHA256</dt>
+                  <dd><code>{pkg["sha256"]}</code></dd>
                 </dl>
 
-                <p>{escape(pkg["description"])}</p>
-
-                <p>
-                  <a href="../{escape(pkg["url"])}">
-                    Download .deb
-                  </a>
-                </p>
-
-                <details>
-                  <summary>SHA256</summary>
-                  <code>{pkg["sha256"]}</code>
-                </details>
+                <a class="download"
+                   href="{html.escape(pkg["url"])}">
+                  Download .deb
+                </a>
               </article>
               """)
 
-          if not cards:
-              cards.append("""
-              <article class="package">
-                <h3>No packages found</h3>
-                <p>No .deb packages were found in the pool directory.</p>
-              </article>
-              """)
+          package_html = "\n".join(cards)
 
-          html = f"""<!DOCTYPE html>
+          if not package_html:
+              package_html = """
+              <p>No .deb packages were found in the repository.</p>
+              """
+
+          index = f"""<!DOCTYPE html>
           <html lang="en">
           <head>
             <meta charset="UTF-8">
-            <meta name="viewport" content="width=device-width, initial-scale=1.0">
+            <meta name="viewport"
+                  content="width=device-width, initial-scale=1.0">
 
             <title>NeyBox APT Repository</title>
 
             <style>
-              :root {{
-                color-scheme: dark;
-              }}
-
               body {{
-                margin: 0;
                 font-family: system-ui, sans-serif;
-                background: #111827;
-                color: #f3f4f6;
-                line-height: 1.6;
-              }}
-
-              main {{
                 max-width: 900px;
                 margin: auto;
-                padding: 40px 20px;
-              }}
-
-              header {{
-                margin-bottom: 32px;
+                padding: 2rem;
+                background: #111;
+                color: #eee;
               }}
 
               h1 {{
-                margin-bottom: 8px;
+                margin-bottom: 0.3rem;
               }}
 
               .subtitle {{
-                color: #9ca3af;
+                color: #aaa;
               }}
 
               .package {{
-                background: #1f2937;
-                border: 1px solid #374151;
+                border: 1px solid #333;
                 border-radius: 12px;
-                padding: 20px;
-                margin: 20px 0;
-              }}
-
-              .package-header {{
-                display: flex;
-                justify-content: space-between;
-                gap: 16px;
-                align-items: center;
-                flex-wrap: wrap;
-              }}
-
-              .package-header span {{
-                background: #374151;
-                padding: 4px 10px;
-                border-radius: 999px;
-                font-size: 0.85rem;
+                padding: 1.2rem;
+                margin-top: 1rem;
+                background: #1a1a1a;
               }}
 
               dl {{
                 display: grid;
                 grid-template-columns: 150px 1fr;
-                gap: 6px 16px;
+                gap: 0.4rem 1rem;
               }}
 
               dt {{
-                color: #9ca3af;
+                color: #aaa;
               }}
 
               dd {{
                 margin: 0;
-              }}
-
-              a {{
-                color: #60a5fa;
+                overflow-wrap: anywhere;
               }}
 
               code {{
-                display: block;
-                overflow-wrap: anywhere;
-                background: #111827;
-                padding: 10px;
-                border-radius: 6px;
-                font-size: 0.8rem;
+                font-size: 0.85rem;
               }}
 
-              .repo {{
-                background: #172033;
-                border-radius: 12px;
-                padding: 20px;
-                margin-bottom: 30px;
-              }}
-
-              @media (max-width: 600px) {{
-                dl {{
-                  grid-template-columns: 1fr;
-                }}
+              .download {{
+                display: inline-block;
+                margin-top: 1rem;
+                padding: 0.7rem 1rem;
+                border-radius: 8px;
+                background: #fff;
+                color: #111;
+                text-decoration: none;
+                font-weight: bold;
               }}
             </style>
           </head>
 
           <body>
-            <main>
-              <header>
-                <h1>NeyBox APT Repository</h1>
-                <p class="subtitle">
-                  Official APT repository for the NeyBox Project.
-                </p>
-              </header>
+            <h1>NeyBox APT Repository</h1>
 
-              <section class="repo">
-                <h2>Repository information</h2>
-                <p><strong>Project:</strong> NeyBox</p>
-                <p><strong>Current release:</strong> 0.3.0</p>
-                <p><strong>Architecture:</strong> ARM64 / AArch64</p>
-                <p><strong>Distribution:</strong> Debian Bookworm</p>
-                <p><strong>Packages detected:</strong> {len(packages)}</p>
+            <p class="subtitle">
+              Debian / Ubuntu ARM64
+            </p>
 
-                <p>
-                  <a href="dists/">Browse distributions</a>
-                  ·
-                  <a href="pool/">Browse package pool</a>
-                </p>
-              </section>
+            <h2>Available packages</h2>
 
-              <section>
-                <h2>Available packages</h2>
+            {package_html}
 
-                {''.join(cards)}
-              </section>
+            <h2>APT configuration</h2>
 
-              <footer>
-                <p class="subtitle">
-                  NeyBox Project · 0.3.0
-                </p>
-              </footer>
-            </main>
+            <pre>
+          deb [trusted=yes] https://kassandraruaortega-del.github.io/NeyBox-Project/apt/debian bookworm main
+            </pre>
           </body>
           </html>
           """
 
           with open("_site/index.html", "w", encoding="utf-8") as f:
-              f.write(html)
+              f.write(index)
           PY
 
       - name: Configure GitHub Pages
@@ -297,7 +207,7 @@ jobs:
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v3
         with:
-          path: ./_site
+          path: "_site"
 
       - name: Deploy to GitHub Pages
         id: deployment
