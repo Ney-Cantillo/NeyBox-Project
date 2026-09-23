@@ -33,9 +33,32 @@ jobs:
           cp -a dists _site/
           cp -a pool _site/
 
-          if [ -f README.md ]; then
-            cp README.md _site/
-          fi
+          cat > _site/index.html <<'EOF'
+          <!DOCTYPE html>
+          <html lang="en">
+          <head>
+            <meta charset="UTF-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1.0">
+            <title>NeyBox APT Repository</title>
+          </head>
+          <body>
+            <h1>NeyBox APT Repository</h1>
+            <p>Official APT repository for NeyBox.</p>
+
+            <h2>Current release</h2>
+            <p>NeyBox 0.3.0</p>
+
+            <h2>Architecture</h2>
+            <p>ARM64 / AArch64</p>
+
+            <h2>Repository</h2>
+            <ul>
+              <li><a href="dists/">dists/</a></li>
+              <li><a href="pool/">pool/</a></li>
+            </ul>
+          </body>
+          </html>
+          EOF
 
       - name: Configure GitHub Pages
         uses: actions/configure-pages@v5
