@@ -2,7 +2,8 @@ Origin: NeyBox Project
 Label: NeyBox
 Suite: bookworm
 Codename: bookworm
-Date: Wed, 23 Sep 2026 20:35:12 +0000
+Date: Wed, 23 Sep 2026 20:47:04 +0000
+Acquire-By-Hash: yes
 Architectures: arm64
 Components: main
 Description: NeyBox APT Repository for Debian/Ubuntu ARM64
