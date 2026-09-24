@@ -111,6 +111,6 @@ BSD-2-Clause. La elegí porque es simple y permisiva: puedes usar, modificar y r
 
 ## Autor
 
-NeyBox Project — hecho por [kassandraruaortega-del](https://github.com/kassandraruaortega-del)
+NeyBox Project — hecho por [Ney-Cantillo](https://github.com/Ney-Cantillo)
 
-Repo oficial: https://github.com/kassandraruaortega-del/NeyBox-Project
+Repo oficial: https://github.com/Ney-Cantillo/NeyBox-Project
